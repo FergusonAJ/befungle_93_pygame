@@ -90,6 +90,108 @@ class InstructionInt(Instruction):
   def __call__(self, program):
     program.push(int(self.symbol))
 
+class InstructionAdd(Instruction):
+  def __init__(self):
+    super().__init__('+')
+
+  def __call__(self, program):
+    if len(program.stack) >= 2:
+      a = program.pop()
+      b = program.pop()
+      program.push(StackValue(a.value + b.value))
+
+class InstructionSub(Instruction):
+  def __init__(self):
+    super().__init__('-')
+
+  def __call__(self, program):
+    if len(program.stack) >= 2:
+      a = program.pop()
+      b = program.pop()
+      program.push(StackValue(b.value - a.value))
+
+class InstructionMult(Instruction):
+  def __init__(self):
+    super().__init__('*')
+
+  def __call__(self, program):
+    if len(program.stack) >= 2:
+      a = program.pop()
+      b = program.pop()
+      program.push(StackValue(a.value * b.value))
+
+class InstructionDiv(Instruction):
+  def __init__(self):
+    super().__init__('/')
+
+  def __call__(self, program):
+    if len(program.stack) >= 2:
+      a = program.pop()
+      b = program.pop()
+      if a.value == 0:
+        program.push(StackValue(0))
+      else:
+        program.push(StackValue(b.value // a.value))
+
+class InstructionMod(Instruction):
+  def __init__(self):
+    super().__init__('%')
+
+  def __call__(self, program):
+    if len(program.stack) >= 2:
+      a = program.pop()
+      b = program.pop()
+      if a.value == 0:
+        program.push(StackValue(0))
+      else:
+        program.push(StackValue(b.value % a.value))
+
+class InstructionNot(Instruction):
+  def __init__(self):
+    super().__init__('!')
+
+  def __call__(self, program):
+    if len(program.stack) >= 1:
+      a = program.pop()
+      if a.value == 0:
+        program.push(StackValue(1))
+      else:
+        program.push(StackValue(0))
+
+class InstructionHorizontalIf(Instruction):
+  def __init__(self):
+    super().__init__('_')
+
+  def __call__(self, program):
+    if len(program.stack) >= 1:
+      a = program.pop()
+      if a.value == 0:
+        program.facing = Facing.EAST
+      else:
+        program.facing = Facing.WEST
+
+class InstructionVerticalIf(Instruction):
+  def __init__(self):
+    super().__init__('|')
+
+  def __call__(self, program):
+    if len(program.stack) >= 1:
+      a = program.pop()
+      if a.value == 0:
+        program.facing = Facing.SOUTH
+      else:
+        program.facing = Facing.NORTH
+
+class InstructionDuplicate(Instruction):
+  def __init__(self):
+    super().__init__(':')
+
+  def __call__(self, program):
+    if len(program.stack) >= 1:
+      a = program.pop()
+      program.push(a)
+      program.push(a)
+
 def GetInstruction(c):
   inst_map = {}
   inst_map[' '] = InstructionSpace
@@ -98,6 +200,15 @@ def GetInstruction(c):
   inst_map['<'] = InstructionLeft
   inst_map['>'] = InstructionRight
   inst_map['@'] = InstructionTerminate
+  inst_map['+'] = InstructionAdd
+  inst_map['-'] = InstructionSub
+  inst_map['*'] = InstructionMult
+  inst_map['/'] = InstructionDiv
+  inst_map['%'] = InstructionMod
+  inst_map['!'] = InstructionNot
+  inst_map['_'] = InstructionHorizontalIf
+  inst_map['|'] = InstructionVerticalIf
+  inst_map[':'] = InstructionDuplicate
   arg_map = {}
   for i in range(10):
     i_str = str(i)
@@ -149,7 +260,14 @@ class Program:
     self.execution_step = 0
 
   def push(self, val):
-    self.stack.append(StackValue(val))
+    if isinstance(val, StackValue):
+      self.stack.append(val)
+    else:
+      self.stack.append(StackValue(val))
+
+  def pop(self):
+    if len(self.stack) > 0:
+      return self.stack.pop()
 
   def step(self):
     if self.facing == Facing.DONE:
