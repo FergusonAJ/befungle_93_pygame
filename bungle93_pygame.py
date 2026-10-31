@@ -74,6 +74,13 @@ class InstructionRight(Instruction):
   def __call__(self, program):
     program.facing = Facing.EAST
 
+class InstructionTerminate(Instruction):
+  def __init__(self):
+    super().__init__('@')
+
+  def __call__(self, program):
+    program.facing = Facing.DONE
+
 def GetInstruction(c):
   inst_map = {}
   inst_map[' '] = InstructionSpace
@@ -81,6 +88,7 @@ def GetInstruction(c):
   inst_map['v'] = InstructionDown
   inst_map['<'] = InstructionLeft
   inst_map['>'] = InstructionRight
+  inst_map['@'] = InstructionTerminate
   return inst_map[c]()
 
 
@@ -102,8 +110,9 @@ class Playfield:
       row = 0
       for line in fp:
         col = 0
-        for c in line.strip('\n'):
+        for c in line.rstrip('\n'):
           if c != '':
+            print(f'({row}, {col}) -> {c}')
             self.field[(row, col)] = GetInstruction(c)
           col += 1
         row += 1
@@ -114,6 +123,7 @@ class Facing(enum.Enum):
   EAST=1
   SOUTH=2
   WEST=3
+  DONE=4
 
 class Program:
   def __init__(self, filename=None):
@@ -123,7 +133,9 @@ class Program:
     self.field = Playfield(filename)
 
   def step(self):
-    if self.facing == Facing.NORTH:
+    if self.facing == Facing.DONE:
+      print('Program terminated')
+    elif self.facing == Facing.NORTH:
       self.PC[0] -= 1
     elif self.facing == Facing.EAST:
       self.PC[1] += 1
@@ -188,14 +200,17 @@ class PygameVisualizer:
         elif evt.key == pygame.K_RIGHTBRACKET:
           self.max_timer_ticks += 1
     pressed_keys = pygame.key.get_pressed()
+    offset = 1
+    if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
+      offset = 5
     if pressed_keys[pygame.K_UP] or pressed_keys[pygame.K_w]:
-      self.pixel_offset[1] += 1
+      self.pixel_offset[1] += offset
     elif pressed_keys[pygame.K_DOWN] or pressed_keys[pygame.K_s]:
-      self.pixel_offset[1] -= 1
+      self.pixel_offset[1] -= offset
     if pressed_keys[pygame.K_LEFT] or pressed_keys[pygame.K_a]:
-      self.pixel_offset[0] += 1
+      self.pixel_offset[0] += offset
     elif pressed_keys[pygame.K_RIGHT] or pressed_keys[pygame.K_d]:
-      self.pixel_offset[0] -= 1
+      self.pixel_offset[0] -= offset
 
   def step(self):
     self.program.step()
@@ -207,6 +222,40 @@ class PygameVisualizer:
     origin_y = self.pixel_offset[1]
     origin_radius = self.tile_size // 2 - 2
     pygame.draw.circle(self.screen, (80, 80, 80), (origin_x, origin_y), origin_radius) 
+    # Draw the grid lines
+    tl_cell_x = math.floor((-1 * self.pixel_offset[0] + self.tile_size // 2) / self.tile_size)
+    tl_cell_y = math.floor((-1 * self.pixel_offset[1] + self.tile_size // 2) / self.tile_size)
+    tl_x = origin_x + (tl_cell_x * self.tile_size) - self.tile_size // 2
+    tl_y = origin_y + (tl_cell_y * self.tile_size) - self.tile_size // 2
+    #pygame.draw.rect(self.screen, (200, 200, 200), (tl_x, tl_y, self.tile_size, self.tile_size))
+    num_cols = math.ceil(self.screen_res[0] / self.tile_size) + 1
+    num_rows = math.ceil(self.screen_res[1] / self.tile_size) + 1
+    for col_idx in range(num_cols):
+      col_cell_x = tl_cell_x + col_idx
+      col_x = origin_x + (col_cell_x * self.tile_size - self.tile_size // 2)
+      pygame.draw.line(self.screen, (30, 30, 30), (col_x, 0), (col_x, self.screen_res[1]), 1)
+    for row_idx in range(num_rows):
+      row_cell_y = tl_cell_y + row_idx
+      row_y = origin_y + (row_cell_y * self.tile_size - self.tile_size // 2)
+      pygame.draw.line(self.screen, (30, 30, 30), (0, row_y), (self.screen_res[0], row_y), 1)
+
+    # Draw the tiles
+    font = pygame.font.SysFont(None, self.tile_size)
+    min_col = tl_cell_x
+    max_col = tl_cell_x + num_cols
+    min_row = tl_cell_y
+    max_row = tl_cell_y + num_rows
+    for row in range(min_row, max_row + 1):
+      for col in range(min_col, max_col + 1):
+        address = (row, col)
+        inst = self.program.field.get_inst(address)
+        if inst.symbol == ' ':
+          continue
+        text_surf = font.render(inst.symbol, False, (255,255,255))
+        text_rect = text_surf.get_rect()
+        text_rect.centerx = origin_x + (col * self.tile_size)
+        text_rect.centery = origin_y + (row * self.tile_size)
+        self.screen.blit(text_surf, text_rect)
     # Draw the program counter
     pc_x = origin_x + self.program.PC[1] * self.tile_size
     pc_y = origin_y + self.program.PC[0] * self.tile_size
@@ -230,40 +279,8 @@ class PygameVisualizer:
       bl = (pc_x - self.tile_size // 6, pc_y + self.tile_size // 4)
       br = (pc_x + self.tile_size // 6, pc_y + self.tile_size // 4)
       pygame.draw.polygon(self.screen, (200, 30, 80), [nose, bl, br])
-    # Draw the grid lines
-    tl_cell_x = math.floor((-1 * self.pixel_offset[0] + self.tile_size // 2) / self.tile_size)
-    tl_cell_y = math.floor((-1 * self.pixel_offset[1] + self.tile_size // 2) / self.tile_size)
-    tl_x = origin_x + (tl_cell_x * self.tile_size) - self.tile_size // 2
-    tl_y = origin_y + (tl_cell_y * self.tile_size) - self.tile_size // 2
-    #pygame.draw.rect(self.screen, (200, 200, 200), (tl_x, tl_y, self.tile_size, self.tile_size))
-    num_cols = math.ceil(self.screen_res[0] / self.tile_size) + 1
-    num_rows = math.ceil(self.screen_res[1] / self.tile_size) + 1
-    for col_idx in range(num_cols):
-      col_cell_x = tl_cell_x + col_idx
-      col_x = origin_x + (col_cell_x * self.tile_size - self.tile_size // 2)
-      pygame.draw.line(self.screen, (30, 30, 30), (col_x, 0), (col_x, self.screen_res[1]), 1)
-    for row_idx in range(num_rows):
-      row_cell_y = tl_cell_y + row_idx
-      row_y = origin_y + (row_cell_y * self.tile_size - self.tile_size // 2)
-      pygame.draw.line(self.screen, (30, 30, 30), (0, row_y), (self.screen_res[0], row_y), 1)
-
-    # Draw the tiles
-    font = pygame.font.SysFont(None, self.tile_size)
-    min_col = tl_cell_x
-    max_col = tl_cell_x + num_rows
-    min_row = tl_cell_y
-    max_row = tl_cell_y + num_rows
-    for row in range(min_row, max_row + 1):
-      for col in range(min_col, max_col + 1):
-        address = (row, col)
-        inst = self.program.field.get_inst(address)
-        if inst.symbol == ' ':
-          continue
-        text_surf = font.render(inst.symbol, False, (255,255,255))
-        text_rect = text_surf.get_rect()
-        text_rect.centerx = origin_x + (col * self.tile_size)
-        text_rect.centery = origin_y + (row * self.tile_size)
-        self.screen.blit(text_surf, text_rect)
+    elif self.program.facing == Facing.DONE:
+      pygame.draw.circle(self.screen, (200, 30, 80), (pc_x, pc_y), self.tile_size // 3)
    
     
 
