@@ -80,6 +80,15 @@ class InstructionTerminate(Instruction):
 
   def __call__(self, program):
     program.facing = Facing.DONE
+    print('PROGRAM TERMINATED, @ REACHED')
+
+class InstructionInt(Instruction):
+  def __init__(self, val):
+    s = str(val)
+    super().__init__(s)
+
+  def __call__(self, program):
+    program.push(int(self.symbol))
 
 def GetInstruction(c):
   inst_map = {}
@@ -89,8 +98,16 @@ def GetInstruction(c):
   inst_map['<'] = InstructionLeft
   inst_map['>'] = InstructionRight
   inst_map['@'] = InstructionTerminate
-  return inst_map[c]()
-
+  arg_map = {}
+  for i in range(10):
+    i_str = str(i)
+    inst_map[i_str] = InstructionInt
+    arg_map[i_str] = i
+  if c in arg_map:
+    args = arg_map[c]
+    return inst_map[c](args)
+  else:
+    return inst_map[c]()
 
 class Playfield:
   def __init__(self, filename=None):
@@ -112,12 +129,10 @@ class Playfield:
         col = 0
         for c in line.rstrip('\n'):
           if c != '':
-            print(f'({row}, {col}) -> {c}')
             self.field[(row, col)] = GetInstruction(c)
           col += 1
         row += 1
 
- 
 class Facing(enum.Enum):
   NORTH=0
   EAST=1
@@ -131,10 +146,15 @@ class Program:
     self.facing = Facing.EAST
     self.stack = []
     self.field = Playfield(filename)
+    self.execution_step = 0
+
+  def push(self, val):
+    self.stack.append(StackValue(val))
 
   def step(self):
     if self.facing == Facing.DONE:
-      print('Program terminated')
+      print('Program terminated -- no move to make')
+      return None
     elif self.facing == Facing.NORTH:
       self.PC[0] -= 1
     elif self.facing == Facing.EAST:
@@ -145,6 +165,7 @@ class Program:
       self.PC[1] -= 1
     inst = self.field.get_inst(tuple(self.PC))
     inst(self)
+    self.execution_step += 1
 
 class PygameVisualizer:
   def __init__(self, program, **kwargs):
@@ -165,6 +186,7 @@ class PygameVisualizer:
     self.tile_size = 32
     self.max_timer_ticks = 6
     self.timer_ticks = self.max_timer_ticks
+    self.info_pane_width = self.screen_res[0] // 4
 
   def run(self):
     self.clock = pygame.time.Clock()
@@ -177,6 +199,8 @@ class PygameVisualizer:
         if self.timer_ticks <= 0:
           self.timer_ticks = self.max_timer_ticks
           self.step()
+          if self.program.facing == Facing.DONE:
+            self.is_paused = True
       self.render()
       self.clock.tick(60)
 
@@ -228,7 +252,7 @@ class PygameVisualizer:
     tl_x = origin_x + (tl_cell_x * self.tile_size) - self.tile_size // 2
     tl_y = origin_y + (tl_cell_y * self.tile_size) - self.tile_size // 2
     #pygame.draw.rect(self.screen, (200, 200, 200), (tl_x, tl_y, self.tile_size, self.tile_size))
-    num_cols = math.ceil(self.screen_res[0] / self.tile_size) + 1
+    num_cols = math.ceil((self.screen_res[0] - self.info_pane_width) / self.tile_size) + 1
     num_rows = math.ceil(self.screen_res[1] / self.tile_size) + 1
     for col_idx in range(num_cols):
       col_cell_x = tl_cell_x + col_idx
@@ -282,10 +306,45 @@ class PygameVisualizer:
     elif self.program.facing == Facing.DONE:
       pygame.draw.circle(self.screen, (200, 30, 80), (pc_x, pc_y), self.tile_size // 3)
    
-    
-
-
+    self.draw_info_pane()
     pygame.display.flip()
+
+  def draw_info_pane(self):
+    info_font = pygame.font.SysFont(None, 20)
+    start_x = self.screen_res[0] - self.info_pane_width
+    pygame.draw.rect(self.screen, (0,0,0), (start_x, 0, self.info_pane_width, self.screen_res[1]))
+    pygame.draw.line(self.screen, (255,255,255), (start_x, 0), (start_x, self.screen_res[1]))
+
+    indent = 10
+    line_height = 24
+    cur_y = 5
+    text_surf = info_font.render('INFO', True, (255,255,255))
+    text_rect = text_surf.get_rect()
+    text_rect.centerx = (start_x + self.info_pane_width // 2)
+    text_rect.top = cur_y
+    self.screen.blit(text_surf, text_rect)
+    cur_y += line_height
+    text_surf = info_font.render(f'Steps: {self.program.execution_step}', True, (255,255,255))
+    text_rect = text_surf.get_rect()
+    text_rect.topleft = (start_x + indent, cur_y)
+    self.screen.blit(text_surf, text_rect)
+    cur_y += line_height
+    text_surf = info_font.render('Stack:', True, (255,255,255))
+    text_rect = text_surf.get_rect()
+    text_rect.topleft = (start_x + indent, cur_y)
+    self.screen.blit(text_surf, text_rect)
+    cur_y += line_height
+    stack_vals = self.program.stack
+    if len(stack_vals) > 0:
+      for stack_idx in range(len(stack_vals) -1, -1, -1):
+        stack_val = stack_vals[stack_idx]
+        text_surf = info_font.render(str(stack_val.value), True, (255,255,255))
+        text_rect = text_surf.get_rect()
+        text_rect.topleft = (start_x + indent + indent, cur_y)
+        self.screen.blit(text_surf, text_rect)
+        cur_y += line_height
+
+
 
 if __name__ == '__main__':
   if len(sys.argv) > 1:
