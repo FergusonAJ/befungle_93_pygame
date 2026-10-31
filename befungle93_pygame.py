@@ -389,6 +389,9 @@ def GetInstruction(c):
 class Playfield:
   def __init__(self, filename=None):
     self.field = {}
+    self.filename = filename
+    self.max_col = 0
+    self.max_row = 0
     if filename is not None:
       self.load(filename)
  
@@ -407,6 +410,11 @@ class Playfield:
         for c in line.rstrip('\n'):
           if c != '':
             self.field[(row, col)] = GetInstruction(c)
+            if c != ' ':
+              if col > self.max_col:
+                self.max_col = col
+              if row > self.max_row:
+                self.max_row = row
           col += 1
         row += 1
 
@@ -493,16 +501,26 @@ class PygameVisualizer:
       if key == 'screen_height':
         self.screen_res[1] = kwargs[key]
     self.screen = pygame.display.set_mode(self.screen_res)
-    self.pixel_offset = [self.screen_res[0] // 2, self.screen_res[1] // 2]
+    self.pixel_offset = [0,0]#[self.screen_res[0] // 2, self.screen_res[1] // 2]
     self.tile_size = 32
     self.max_timer_ticks = 6
     self.timer_ticks = self.max_timer_ticks
     self.info_pane_width = self.screen_res[0] // 4
+    if self.program.field.filename is not None:
+      max_col = self.program.field.max_col
+      max_row = self.program.field.max_row
+      print(f'Found {max_row} rows and {max_col} columns!')
+      width_pixels = self.screen_res[0] - self.info_pane_width
+      tile_size_col = width_pixels // (max_col+2)
+      tile_size_row = self.screen_res[1] // (max_row+2)
+      self.tile_size = min(tile_size_col, tile_size_row)
+      self.pixel_offset = [self.tile_size, self.tile_size]
 
   def run(self):
     self.clock = pygame.time.Clock()
     self.is_running = True
     self.is_paused = True
+    self.is_following = False
     while self.is_running:
       self.handle_input()
       if not self.is_paused:
@@ -534,6 +552,8 @@ class PygameVisualizer:
           self.max_timer_ticks = max(self.max_timer_ticks - 1, 1)
         elif evt.key == pygame.K_RIGHTBRACKET:
           self.max_timer_ticks += 1
+        elif evt.key == pygame.K_f:
+          self.is_following = not self.is_following
     pressed_keys = pygame.key.get_pressed()
     offset = 1
     if pressed_keys[pygame.K_LSHIFT] or pressed_keys[pygame.K_RSHIFT]:
@@ -553,6 +573,11 @@ class PygameVisualizer:
   def render(self):
     self.screen.fill((0,0,0))
     # Draw the origin for reference
+    if self.is_following:
+      grid_width = self.screen_res[0] - self.info_pane_width
+      x = -self.program.PC[1] * self.tile_size + grid_width // 2
+      y = -self.program.PC[0] * self.tile_size + self.screen_res[1] // 2
+      self.pixel_offset = [x, y]
     origin_x = self.pixel_offset[0]
     origin_y = self.pixel_offset[1]
     origin_radius = self.tile_size // 2 - 2
