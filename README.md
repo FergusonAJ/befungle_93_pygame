@@ -25,3 +25,6 @@ Controls for the visualizer:
 - p to pause/unpause
 - f to toggle following the program counter
 - Escape or q to quit
+
+Files in the `examples/esolang_examples` were copied from the [Befungle93 esolang wiki page](https://esolangs.org/wiki/Befunge).
+Other files in `examples` were made by hand. 
